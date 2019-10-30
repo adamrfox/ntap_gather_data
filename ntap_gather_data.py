@@ -63,9 +63,11 @@ if __name__ == "__main__":
     DEBUG = False
     svm_list = []
     ntap_vols = {}
+    san_volumes = {}
     ws = {}
+    NAS_ONLY = True
 
-    optlist, args = getopt.getopt(sys.argv[1:], 'hc:D', ['--help', '--creds=', '--debug'])
+    optlist, args = getopt.getopt(sys.argv[1:], 'hc:Da', ['--help', '--creds=', '--debug', '--all'])
     for opt, a in optlist:
         if opt in ('-h', '--help'):
             usage()
@@ -76,6 +78,8 @@ if __name__ == "__main__":
                 (user, password) = get_creds_from_file(a)
         if opt in ('-D', '--debug'):
             DEBUG = True
+        if opt in ('-a', '--all'):
+            NAS_ONLY = False
 
     (ntap, outfile) = args
 
@@ -110,6 +114,18 @@ if __name__ == "__main__":
         vs_type = vs.child_get_string("vserver-type")
         if vs_type == "data":
             svm_list.append(vs.child_get_string('vserver-name'))
+    if NAS_ONLY:
+        result = netapp.invoke('lun-get-iter')
+        ntap_invoke_err_check(result)
+        lun_info = result.child_get('attributes-list').children_get()
+        for lun in lun_info:
+            lun_vol = lun.child_get_string('volume')
+            lun_svm = lun.child_get_string('vserver')
+            try:
+                san_volumes[lun_svm]
+            except KeyError:
+                san_volumes[lun_svm] = []
+            san_volumes[lun_svm].append(lun_vol)
     result = netapp.invoke('volume-get-iter')
     vol_info = result.child_get('attributes-list').children_get()
     for vol in vol_info:
@@ -117,6 +133,8 @@ if __name__ == "__main__":
         name = info.child_get_string('name')
         svm = info.child_get_string('owning-vserver-name')
         if svm not in svm_list:
+            continue
+        if NAS_ONLY and name in san_volumes[svm]:
             continue
         junction = info.child_get_string('junction-path')
         if junction == "/":
