@@ -10,6 +10,7 @@ import getopt
 import getpass
 from codecs import decode
 
+# Simple Class to store the Data
 class NetAppVol:
     def __init__(self, name, junction, space, inodes):
         self.name = name
@@ -21,8 +22,16 @@ class NetAppVol:
         return (self.name, self.junction, self.space, self.files)
 
 def usage():
-    print("Usage goes here")
+    sys.stderr.write("Usage: ntap_gather_data.py [-ha] [-c creds] ntap output_file\n")
+    sys.stderr.write("-h | --help  : Prints Usage\n")
+    sys.stderr.write("-a | -all    : Include all volume.  By default, volumes with LUNs are excluded\n")
+    sys.stderr.write("-c | --creds : Put NTAP credentials on the command line.  Either user:pwd or creds file\n")
+    sys.stderr.write("   See README for details on creds file.\n")
+    sys.stderr.write("ntap: Name or IP of the NTAP Cluster Management Port\n")
+    sys.stderr.write("output_file: File to output. Format is MicroSoft XLSX\n")
     exit(0)
+
+# Pull creds from a file created by creds_encode
 def get_creds_from_file (file):
     with open(file) as fp:
         data = fp.read()
@@ -46,12 +55,14 @@ def get_creds_from_file (file):
             ntap_password = xs[2]
     return (ntap_user, ntap_password)
 
+# Check connect to NTAP
 def ntap_set_err_check(out):
     if(out and (out.results_errno() != 0)) :
         r = out.results_reason()
         print("Connection to filer failed" + r + "\n")
         sys.exit(2)
 
+# Check NTAP API Call
 def ntap_invoke_err_check(out):
     if(out.results_status() == "failed"):
             print(out.results_reason() + "\n")
@@ -67,6 +78,7 @@ if __name__ == "__main__":
     ws = {}
     NAS_ONLY = True
 
+# Parse Arguments
     optlist, args = getopt.getopt(sys.argv[1:], 'hc:Da', ['--help', '--creds=', '--debug', '--all'])
     for opt, a in optlist:
         if opt in ('-h', '--help'):
@@ -80,9 +92,12 @@ if __name__ == "__main__":
             DEBUG = True
         if opt in ('-a', '--all'):
             NAS_ONLY = False
+    try:
+        (ntap, outfile) = args
+    except ValueError:
+        usage()
 
-    (ntap, outfile) = args
-
+# If no creds are supplied on CLI, prompt for them
     if user == "":
         if int(sys.version[0]) > 2:
             user = input("User: ")
@@ -92,7 +107,6 @@ if __name__ == "__main__":
         password = getpass.getpass("Password: ")
 
 # Setup NTAP API Session
-
     netapp = NaServer(ntap, 1, 15)
     out = netapp.set_transport_type('HTTPS')
     ntap_set_err_check(out)
@@ -101,12 +115,15 @@ if __name__ == "__main__":
     out = netapp.set_admin_user(user, password)
     ntap_set_err_check(out)
 
+# Pull basic info from NTAP
     result = netapp.invoke('cluster-identity-get')
     ntap_invoke_err_check(result)
     cluster_info = result.child_get('attributes').child_get('cluster-identity-info')
     cluster_name = cluster_info.child_get_string('cluster-name')
     cluster_serial = cluster_info.child_get_string('cluster-serial-number')
     cluster_location = cluster_info.child_get_string('cluster-location')
+
+# Pull SVMs from NTAP
     result = netapp.invoke('vserver-get-iter')
     ntap_invoke_err_check(result)
     vs_info = result.child_get('attributes-list').children_get()
@@ -114,6 +131,8 @@ if __name__ == "__main__":
         vs_type = vs.child_get_string("vserver-type")
         if vs_type == "data":
             svm_list.append(vs.child_get_string('vserver-name'))
+
+# Discover volumes that have LUNs.  Will exclude them later
     if NAS_ONLY:
         has_luns = True
         result = netapp.invoke('lun-get-iter')
@@ -131,6 +150,8 @@ if __name__ == "__main__":
                 except KeyError:
                     san_volumes[lun_svm] = []
                 san_volumes[lun_svm].append(lun_vol)
+
+# Gather volume info.  Exclude if necessary, create data structure for volume data
     result = netapp.invoke('volume-get-iter')
     vol_info = result.child_get('attributes-list').children_get()
     for vol in vol_info:
@@ -153,6 +174,8 @@ if __name__ == "__main__":
         except KeyError:
             ntap_vols[svm] = []
         ntap_vols[svm].append(NetAppVol(name, junction, space_used, inodes_used))
+
+# Generate Excel File
     wb = xlsxwriter.Workbook(outfile)
     bold = wb.add_format({'bold': True})
     heading = wb.add_format({'bold': True, 'underline': True})
