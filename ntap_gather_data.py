@@ -115,17 +115,22 @@ if __name__ == "__main__":
         if vs_type == "data":
             svm_list.append(vs.child_get_string('vserver-name'))
     if NAS_ONLY:
+        has_luns = True
         result = netapp.invoke('lun-get-iter')
         ntap_invoke_err_check(result)
-        lun_info = result.child_get('attributes-list').children_get()
-        for lun in lun_info:
-            lun_vol = lun.child_get_string('volume')
-            lun_svm = lun.child_get_string('vserver')
-            try:
-                san_volumes[lun_svm]
-            except KeyError:
-                san_volumes[lun_svm] = []
-            san_volumes[lun_svm].append(lun_vol)
+        try:
+            lun_info = result.child_get('attributes-list').children_get()
+        except AttributeError:
+            has_luns = False
+        if has_luns:
+            for lun in lun_info:
+                lun_vol = lun.child_get_string('volume')
+                lun_svm = lun.child_get_string('vserver')
+                try:
+                  san_volumes[lun_svm]
+                except KeyError:
+                    san_volumes[lun_svm] = []
+                san_volumes[lun_svm].append(lun_vol)
     result = netapp.invoke('volume-get-iter')
     vol_info = result.child_get('attributes-list').children_get()
     for vol in vol_info:
@@ -134,7 +139,7 @@ if __name__ == "__main__":
         svm = info.child_get_string('owning-vserver-name')
         if svm not in svm_list:
             continue
-        if NAS_ONLY and name in san_volumes[svm]:
+        if NAS_ONLY and has_luns and name in san_volumes[svm]:
             continue
         junction = info.child_get_string('junction-path')
         if junction == "/":
