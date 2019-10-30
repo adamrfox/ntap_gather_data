@@ -212,8 +212,8 @@ if __name__ == "__main__":
         ws[svm].write('D'+str(row), '=SUM(D2:D' + str(row-2) +')', space_unit_total)
         ws[svm].write('E'+str(row), '=SUM(E2:E' + str(row-2) + ')', bold)
         if first_sheet:
-            sum_space +=  svm + '!' + 'D' + str(row)
-            sum_files +=  svm + '!' + 'E' + str(row)
+            sum_space += svm + '!' + 'D' + str(row)
+            sum_files += svm + '!' + 'E' + str(row)
             first_sheet = False
         else:
             sum_space += ',' + svm + '!' + 'D' + str(row)
