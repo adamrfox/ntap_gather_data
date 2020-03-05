@@ -68,6 +68,11 @@ def ntap_invoke_err_check(out):
             print(out.results_reason() + "\n")
             sys.exit(2)
 
+def dprint(message):
+    if DEBUG:
+        print (message)
+
+
 if __name__ == "__main__":
     user = ""
     password = ""
@@ -131,49 +136,63 @@ if __name__ == "__main__":
         vs_type = vs.child_get_string("vserver-type")
         if vs_type == "data":
             svm_list.append(vs.child_get_string('vserver-name'))
+    dprint(svm_list)
 
+    for svm_inst in svm_list:
+        netapp.set_vserver(svm_inst)
+        dprint("Processing SVM: " + svm_inst)
 # Discover volumes that have LUNs.  Will exclude them later
-    if NAS_ONLY:
-        has_luns = True
-        result = netapp.invoke('lun-get-iter')
-        ntap_invoke_err_check(result)
-        try:
-            lun_info = result.child_get('attributes-list').children_get()
-        except AttributeError:
-            has_luns = False
-        if has_luns:
-            for lun in lun_info:
-                lun_vol = lun.child_get_string('volume')
-                lun_svm = lun.child_get_string('vserver')
-                try:
-                  san_volumes[lun_svm]
-                except KeyError:
-                    san_volumes[lun_svm] = []
-                san_volumes[lun_svm].append(lun_vol)
+        if NAS_ONLY:
+            has_luns = True
+            result = netapp.invoke('lun-get-iter')
+            ntap_invoke_err_check(result)
+            try:
+                lun_info = result.child_get('attributes-list').children_get()
+            except AttributeError:
+                has_luns = False
+            if has_luns:
+                for lun in lun_info:
+                    lun_vol = lun.child_get_string('volume')
+                    lun_svm = lun.child_get_string('vserver')
+                    try:
+                        san_volumes[lun_svm]
+                    except KeyError:
+                        san_volumes[lun_svm] = []
+                    san_volumes[lun_svm].append(lun_vol)
 
 # Gather volume info.  Exclude if necessary, create data structure for volume data
-    result = netapp.invoke('volume-get-iter')
-    vol_info = result.child_get('attributes-list').children_get()
-    for vol in vol_info:
-        info = vol.child_get('volume-id-attributes')
-        name = info.child_get_string('name')
-        svm = info.child_get_string('owning-vserver-name')
-        if svm not in svm_list:
-            continue
-        if NAS_ONLY and has_luns and name in san_volumes[svm]:
-            continue
-        junction = info.child_get_string('junction-path')
-        if junction == "/":
-            continue
-        space = vol.child_get('volume-space-attributes')
-        space_used = space.child_get_int('logical-used-by-afs')
-        inodes = vol.child_get('volume-inode-attributes')
-        inodes_used = inodes.child_get_int('files-used')
+        result = netapp.invoke('volume-get-iter')
         try:
-            ntap_vols[svm]
-        except KeyError:
-            ntap_vols[svm] = []
-        ntap_vols[svm].append(NetAppVol(name, junction, space_used, inodes_used))
+            vol_info = result.child_get('attributes-list').children_get()
+        except AttributeError:
+            dprint("Skipping because SVM has no volumes")
+            continue
+        for vol in vol_info:
+            info = vol.child_get('volume-id-attributes')
+            name = info.child_get_string('name')
+            svm = info.child_get_string('owning-vserver-name')
+            dprint("SVM: " + svm + " / VOL: " + name)
+            if svm not in svm_list:
+                dprint("Skipping due to SVM list")
+                continue
+            if NAS_ONLY and has_luns and name in san_volumes[svm]:
+                dprint("Skipping because of NAS_ONLY")
+                continue
+            junction = str(info.child_get_string('junction-path'))
+            dprint ("JUNCT: " + junction)
+            if junction == "/" or (NAS_ONLY and junction == "None"):
+                dprint("Skipping because of junction")
+                continue
+            space = vol.child_get('volume-space-attributes')
+            # space_used = space.child_get_int('logical-used-by-afs')
+            space_used = space.child_get_int('size-used')
+            inodes = vol.child_get('volume-inode-attributes')
+            inodes_used = inodes.child_get_int('files-used')
+            try:
+                ntap_vols[svm]
+            except KeyError:
+                ntap_vols[svm] = []
+            ntap_vols[svm].append(NetAppVol(name, junction, space_used, inodes_used))
 
 # Generate Excel File
     wb = xlsxwriter.Workbook(outfile)
