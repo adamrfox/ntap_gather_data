@@ -9,8 +9,9 @@ This script uses 2 non-stanedard Python libraries.  Both are included in the rep
 
 I have tested the script in Python 2.7 and 3.7.4.  Other versions may work but I haven't tested them.  Let me know if some version of 3.x doesn't work.  I'm not too concerned with supporting earlier than 2.7 at this time since Python 2 is EOL in 2020.
 
+Be aware that due to issues with the NetApp API that I have not been able to work around, FlexGroups are currently not supported
 <h3>Authentication</h3>
-The NTAP API requires creentials.  The simplest way to handle this is to allow the script to prompt the user.  If the goal is to run non-interactively, there are 3 options.  The first is to simnply hard code them into the script.  The variabled 'user' and 'password' are initialized as empty strings.  You can change that if you like.
+The NTAP API requires credentials.  The simplest way to handle this is to allow the script to prompt the user.  If the goal is to run non-interactively, there are 3 options.  The first is to simnply hard code them into the script.  The variabled 'user' and 'password' are initialized as empty strings.  You can change that if you like.
 The other 2 involve the -c flag.  The -c flag takes one of two arguments.  The first is simply 'user:password'.  This obviously puts the credentials in plaintext on the command line, but it works.  
 The other is to store the credentials in a obfuscated file on the client.  In this case argument to the -c flag is the name of the file.  The file is expected to be in the format created by my 
 <a href="https://github.com/adamrfox/creds_encode">creds_encode script</a>.  It's not the most secure but that and locking the file down with permissions may be acceptable to some sites.
